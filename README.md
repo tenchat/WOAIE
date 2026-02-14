@@ -39,143 +39,108 @@
 (function() {
     'use strict';
 
-    // 1. 样式注入
+    // 1. 注入优化后的UI样式
     GM_addStyle(`
-        #wx-extractor-btn {
-            position: fixed;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 9999;
-            background: #07c160;
-            color: white;
-            padding: 12px;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(7,193,96,0.3);
-            font-size: 24px;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        #wx-tool-btn { 
+            position: fixed; left: 20px; top: 50%; transform: translateY(-50%); 
+            z-index: 9999; background: #07c160; color: white; padding: 12px; 
+            border-radius: 50%; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); 
+            font-size: 24px; width: 50px; height: 50px; display: flex; 
+            align-items: center; justify-content: center; transition: 0.3s;
         }
-        #wx-extractor-btn:hover { background: #06ad56; transform: translateY(-50%) scale(1.1); }
-
-        #wx-res-card {
-            position: fixed;
-            left: 85px;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 9999;
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            width: 280px;
-            display: none;
-            border: 1px solid #f0f0f0;
-            animation: fadeIn 0.3s ease;
+        #wx-tool-btn:hover { transform: translateY(-50%) scale(1.1); background: #06ad56; }
+        #wx-info-card { 
+            position: fixed; left: 85px; top: 50%; transform: translateY(-50%); 
+            z-index: 9999; background: white; padding: 20px; border-radius: 12px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15); width: 280px; display: none; 
+            border: 1px solid #f0f0f0; 
         }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-45%); } to { opacity: 1; transform: translateY(-50%); } }
-
-        .wx-res-item { margin-bottom: 15px; }
-        .wx-res-label { font-size: 12px; color: #888; margin-bottom: 6px; font-weight: bold; }
-        .wx-res-value {
-            font-size: 14px;
-            font-weight: 600;
-            color: #333;
-            font-family: 'SF Mono', Consolas, monospace;
-            background: #f9f9f9;
-            padding: 8px 10px;
-            border-radius: 6px;
-            word-break: break-all;
-            cursor: pointer;
-            border: 1px dashed #ddd;
+        .info-item { margin-bottom: 15px; }
+        .info-label { font-size: 12px; color: #888; margin-bottom: 5px; font-weight: bold; }
+        .info-value { 
+            font-size: 14px; font-weight: 600; color: #333; background: #f9f9f9; 
+            padding: 8px; border-radius: 6px; cursor: pointer; border: 1px dashed #ddd;
+            transition: 0.2s; min-height: 20px;
         }
-        .wx-res-value:hover { color: #07c160; border-color: #07c160; background: #f0fdf4; }
-        .wx-id-type { font-size: 10px; color: #07c160; float: right; font-weight: normal; }
-        .wx-close { position: absolute; right: 12px; top: 12px; cursor: pointer; color: #bbb; font-size: 18px; }
+        .info-value:hover { color: #07c160; border-color: #07c160; background: #f0fdf4; }
+        .close-x { position: absolute; right: 12px; top: 12px; cursor: pointer; color: #bbb; }
     `);
 
-    // 2. 结构创建
+    // 2. 创建UI元素
     const btn = document.createElement('div');
-    btn.id = 'wx-extractor-btn';
+    btn.id = 'wx-tool-btn';
     btn.innerHTML = '📋';
     document.body.appendChild(btn);
 
     const card = document.createElement('div');
-    card.id = 'wx-res-card';
+    card.id = 'wx-info-card';
     card.innerHTML = `
-        <div class="wx-close">✕</div>
-        <div class="wx-res-item">
-            <div class="wx-res-label">公众号名称</div>
-            <div id="val-nick" class="wx-res-value">提取中...</div>
+        <div class="close-x">✕</div>
+        <div class="info-item">
+            <div class="info-label">公众号名称</div>
+            <div id="out-nick" class="info-value">点击提取</div>
         </div>
-        <div class="wx-res-item">
-            <div class="wx-res-label">
-                公众号 ID <span id="id-type" class="wx-id-type"></span>
-            </div>
-            <div id="val-id" class="wx-res-value">提取中...</div>
+        <div class="info-item">
+            <div class="info-label">公众号 ID (优先微信号)</div>
+            <div id="out-id" class="info-value">点击提取</div>
         </div>
-        <div style="font-size:11px; color:#666; text-align:center;">点击内容复制，✕ 关闭面板</div>
+        <div style="font-size:11px; color:#999; text-align:center;">提示：点击上方灰色框即可快速复制</div>
     `;
     document.body.appendChild(card);
 
-    // 3. 核心逻辑
+    // 3. 增强版解析逻辑
     btn.onclick = () => {
         const data = window.cgiDataNew || {};
-        const html = document.documentElement.innerHTML;
-
-        // 辅助提取函数：先从变量找，再从正则找
-        const getVal = (key) => {
-            if (data[key]) return data[key];
-            const reg = new RegExp(`${key}\\s*:\\s*JsDecode\\(['"](.*?)['"]\\)`);
-            const match = html.match(reg);
+        
+        // 解析函数：先变量，后正则
+        const getV = (k) => {
+            if (data[k]) return data[k];
+            const reg = new RegExp(`${k}\\s*:\\s*JsDecode\\(['"](.*?)['"]\\)`);
+            const match = document.documentElement.innerHTML.match(reg);
             return match ? match[1] : null;
         };
 
-        const nick = getVal('nick_name') || '未找到';
-        const alias = getVal('alias');
-        const userName = getVal('user_name');
-
-        let finalID = '';
-        let typeText = '';
-
-        // 判断逻辑：如果 alias 存在且不为空字符串，则使用 alias；否则使用 user_name
-        if (alias && alias.trim() !== "") {
-            finalID = alias;
-            typeText = "(微信号/Alias)";
-        } else {
-            finalID = userName || '未找到';
-            typeText = "(原始ID/Username)";
+        // --- 公众号名称提取逻辑优化 ---
+        let nick = getV('nick_name');
+        // 兜底逻辑：如果JS变量中没有，直接抓取页面顶部显示的名称元素
+        if (!nick || nick === '无法识别') {
+            const el = document.querySelector('#profileMetatData strong.profile_nickname') || 
+                       document.querySelector('.profile_nickname') || 
+                       document.querySelector('#js_name');
+            nick = el ? el.innerText.trim() : '无法识别';
         }
 
-        document.getElementById('val-nick').innerText = nick;
-        document.getElementById('val-id').innerText = finalID;
-        document.getElementById('id-type').innerText = typeText;
+        // --- ID 提取逻辑 ---
+        const alias = getV('alias');
+        const user = getV('user_name');
+        const finalID = (alias && alias.trim() !== "") ? alias : (user || '未找到ID');
 
+        document.getElementById('out-nick').innerText = nick;
+        document.getElementById('out-id').innerText = finalID;
         card.style.display = 'block';
     };
 
-    // 4. 复制功能
+    // 4. 一键复制功能
     const setupCopy = (id) => {
         const el = document.getElementById(id);
         el.onclick = () => {
             const text = el.innerText;
-            if (text.includes('中') || text === '未找到') return;
-            GM_setClipboard(text);
-            const originalText = el.innerText;
+            if (text === '提取中...' || text === '点击提取' || text.includes('未找到')) return;
+            
+            GM_setClipboard(text); // 使用油猴专用复制API，稳定性更高
+            const original = el.innerText;
             el.innerText = '✅ 已复制';
-            setTimeout(() => el.innerText = originalText, 800);
+            el.style.color = '#07c160';
+            setTimeout(() => {
+                el.innerText = original;
+                el.style.color = '#333';
+            }, 800);
         };
     };
 
-    setupCopy('val-nick');
-    setupCopy('val-id');
-    document.querySelector('.wx-close').onclick = () => card.style.display = 'none';
-
+    setupCopy('out-nick');
+    setupCopy('out-id');
+    card.querySelector('.close-x').onclick = () => card.style.display = 'none';
 })();
 
 ```
