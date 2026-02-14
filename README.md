@@ -9,8 +9,8 @@
 在安装脚本前，请确保您的浏览器已安装用户脚本管理器扩展（插件）。
 
 1.  **推荐插件**：
-    * **篡改猴 (Tampermonkey)**：最为流行，功能强大 <https://www.tampermonkey.net/> 。
-    * **暴力猴 (Violentmonkey)**：开源轻量，操作简洁 <https://violentmonkey.github.io/>。
+    * [**篡改猴 (Tampermonkey)**](https://www.tampermonkey.net/)：最为流行，功能强大 。
+    * [**暴力猴 (Violentmonkey)**](https://violentmonkey.github.io/)：开源轻量，操作简洁。
 2.  **获取方式**：在 Chrome、Edge 或 Firefox 的扩展商店搜索名称并添加即可。
 
 ---
