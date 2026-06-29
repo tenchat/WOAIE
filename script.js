@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         微信公众号信息提取器
 // @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  一个简单好用的微信公众号信息提取器
+// @version      1.3
+// @description  一个简单好用的微信公众号信息提取器（适配 2026 新版页面格式，明文 alias/user_name/nick_name 字段）
 // @author       CQU_major
 // @match        https://mp.weixin.qq.com/s/*
 // @match        https://mp.weixin.qq.com/s?*
 // @grant        GM_setClipboard
 // @grant        GM_addStyle
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function() {
@@ -69,11 +70,23 @@
 
     // 3. 核心提取逻辑
     btn.onclick = () => {
-        const data = window.cgiDataNew || {};
+        // 兼容 Tampermonkey 沙箱：优先 unsafeWindow，回退到 window
+        const win = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+        const data = win.cgiDataNew || window.cgiDataNew || {};
         const html = document.documentElement.innerHTML;
 
         const getV = (k) => {
-            if (data[k]) return data[k];
+            // 1) 直接从 window.cgiDataNew 对象读取（最可靠）
+            if (data[k]) return String(data[k]);
+
+            // 2) 新版明文格式：key: 'value' 或 key: "value"
+            //    支持 \x3c 之类的转义字符（cgiDataNew 里 content_noencode 用的就是这种）
+            //    使用反向引用 \1 保证开闭引号一致
+            const plainReg = new RegExp(`${k}\\s*:\\s*(['"])((?:[^'"\\\\]|\\\\.)*?)\\1`);
+            const plainMatch = html.match(plainReg);
+            if (plainMatch && plainMatch[2]) return plainMatch[2];
+
+            // 3) 旧版 JsDecode 格式：key: JsDecode('value')（向后兼容）
             const reg = new RegExp(`${k}\\s*:\\s*JsDecode\\(['"](.*?)['"]\\)`);
             const match = html.match(reg);
             return match ? match[1] : null;
